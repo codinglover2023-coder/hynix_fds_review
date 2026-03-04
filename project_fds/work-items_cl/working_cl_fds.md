@@ -4,12 +4,8 @@
 
 
 ## Rule 101: Todo Kickoff Bundle (Generic)
-root rule 101 00003
-
-api rule 101 api_00001
-arch rule 101 arch_00001
-cron rule 101 00005
-
+fds rule 101 00001
+fds cl rule 101 00001 (2026-03-04 실행: fds_00001 kickoff bundle 재검토/갱신)
 
 ## Rule 102: Todo Execution From Issue Docs
 root rule 102 00005
@@ -17,6 +13,7 @@ root rule 102 00005
 api rule 102 00006
 
 cron rule 102 00006
+fds cl rule 102 00001 (2026-03-04 실행: DB/Admin/Proxy/Auth/Seeding 구현, 통합 검증 잔여)
 
 
 

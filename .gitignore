@@ -43,6 +43,7 @@ ENV/
 *.log
 *.tmp
 *.temp
+*.db
 
 # Tooling
 .python-version
