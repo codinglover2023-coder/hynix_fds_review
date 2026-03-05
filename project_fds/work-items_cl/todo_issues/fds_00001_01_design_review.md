@@ -12,7 +12,7 @@ issue_idx: 01
 
 ## MVP 한 줄 정의
 
-> **인가 통제형 단일 토큰 프록시 게이트웨이 (화이트리스트 기반)**
+> **인가 통제형 Keycloak 기반 프록시 게이트웨이 (화이트리스트 기반)**
 
 ## 아키텍처 개요
 
@@ -149,7 +149,8 @@ async with httpx.AsyncClient() as client:
 1. DB 등록 서비스만 프록시 허용 (미등록 → 404)
 2. `is_active=False` 서비스 → 403
 3. `uri_mappings` 화이트리스트 prefix 매칭 (미등록 경로 → 403)
-4. Admin API: `X-ADMIN-KEY` 헤더 필수
+4. 사용자 인증: Keycloak JWT 검증 (OIDC)
+5. ~~Admin API: `X-ADMIN-KEY` 헤더 필수~~ → 제거 (DB 직접 관리)
 
 ### Phase 2
 1. SSRF 방지: 내부 IP 대역 차단 (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
@@ -161,14 +162,14 @@ async with httpx.AsyncClient() as client:
 
 | 항목 | 결정 |
 |---|---|
-| 인증 주체 | FDS 단일 서비스 토큰 |
+| 인증 주체 | Keycloak Access Token (JWT/OIDC) |
 | 프록시 경로 | `/{sub_prefix}/{path:path}` 루트 레벨 |
-| 관리 경로 | `/api/admin/` 하위 |
+| 서비스/매핑 관리 | DB 직접 CRUD (Admin API 제거) |
 | uri_mappings 역할 | 화이트리스트 (prefix 매칭, 경로 변환 없음) |
 | 토큰 저장 | MVP: 평문 / Phase 2: Fernet |
 | httpx timeout | 30초 고정 |
 | Rate limit | MVP 제외 |
-| Admin 인증 | `X-ADMIN-KEY` 헤더 |
+| ~~Admin 인증~~ | ~~`X-ADMIN-KEY` 헤더~~ → Admin API 제거 (DB 직접 관리) |
 | SQLite 파일 | `project_fds/fds.db` |
 | httpx AsyncClient | lifespan에서 생성/해제 |
 | CRUD 레이어 | `app/crud/` 디렉토리 분리 |

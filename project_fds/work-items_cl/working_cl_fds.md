@@ -1,4 +1,8 @@
+```
 
+관리 라우터는 db crud로 대체
+
+```
 
 ## Rule 104: Full Rule Audit Report
 

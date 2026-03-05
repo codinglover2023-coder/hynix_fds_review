@@ -15,14 +15,14 @@ todo_idx: fds_00001
 
 ## 시스템 성격
 
-> **인가 통제형 단일 토큰 프록시 게이트웨이 (화이트리스트 기반)**
-> - FDS 단일 서비스 토큰 모델 (사용자별 위임 없음)
+> **인가 통제형 Keycloak 기반 프록시 게이트웨이 (화이트리스트 기반)**
+> - 사용자 인증: Keycloak Access Token (JWT/OIDC)
 > - DB 기반 서비스·URI 매핑 관리
-> - 서비스별 인가 헤더 자동 주입
+> - 서비스별 인가 헤더 자동 주입 (외부 서비스 토큰은 별도)
 > - uri_mappings = 허용 경로 화이트리스트 (경로 변환 없음)
-> - Admin API = API Key 보호 (`X-ADMIN-KEY`)
+> - 서비스/매핑 관리: DB 직접 CRUD (Admin API 엔드포인트 제거)
 
-향후 확장 (Phase 2): 사용자별 토큰 위임, OAuth, Fernet 암호화, Rate limit, proxy_logs
+향후 확장 (Phase 2): pkey 교집합 강제, Fernet 암호화, Rate limit, proxy_logs
 
 ## 전체 아키텍처
 
@@ -30,9 +30,9 @@ todo_idx: fds_00001
 Client
    ↓
 FDS API (FastAPI)
-   ├── Admin Router (/api/admin/) — 서비스 등록/관리
+   ├── 인증: Keycloak JWT 검증 (OIDC)
    ├── Proxy Router (/{sub_prefix}/{path:path}) — 동적 프록시
-   ├── DB (SQLite → 향후 PostgreSQL)
+   ├── DB (SQLite → 향후 PostgreSQL) — 서비스/매핑 직접 관리
    └── httpx AsyncClient (외부 호출)
          ↓
    Confluence / Jira / ...
@@ -63,19 +63,19 @@ FDS API (FastAPI)
 
 | 항목 | 결정 | 비고 |
 |---|---|---|
-| 인증 주체 | FDS 단일 서비스 토큰 | 사용자별 위임은 Phase 2 |
+| 인증 주체 | Keycloak Access Token (JWT/OIDC) | X-ADMIN-KEY 대체 |
 | 프록시 경로 | `/{sub_prefix}/{path:path}` 루트 레벨 | `/proxy/` prefix 불필요 |
 | uri_mappings 역할 | 화이트리스트 (허용 경로만 통과) | 경로 변환 없음 |
 | URI 매핑 검증 | prefix 매칭 | 와일드카드/정규식은 Phase 2 |
 | 토큰 저장 | 평문 (MVP 샘플용) | Fernet 암호화는 Phase 2 |
 | httpx timeout | 30초 고정 | 서비스별 설정은 Phase 2 |
 | Rate limit | MVP 제외 | Phase 2 |
-| Admin API 인증 | API Key 헤더 (`X-ADMIN-KEY`) | 단일 키 |
+| 서비스/매핑 관리 | DB 직접 CRUD (Admin API 제거) | DBeaver/스크립트 등 |
 
 ## 작업 항목 (구현 순서)
 
 1. [x] DB 모델 + 세션 초기화 (SQLAlchemy + aiosqlite)
-2. [x] Admin API 완성 (서비스/URI CRUD + API Key 보호)
+2. [x] ~~Admin API 완성~~ → DB 직접 CRUD로 대체 (Admin 라우터 제거 예정)
 3. [x] Proxy 구현 (sub_prefix → DB 조회 → 화이트리스트 확인 → httpx 전달)
 4. [x] 인가 헤더 주입 (bearer, basic, api_key)
 5. [x] 샘플 데이터 시딩 (Confluence, Jira 초기 데이터)
@@ -129,6 +129,15 @@ FDS API (FastAPI)
 - 통합 수준: Level 1(엔벨로프) ~ Level 4(필드 매핑) 단계적 접근
 - 권장: Phase 1에서 엔벨로프 래핑 + 에러 포맷 통합 (~30줄), 어댑터는 필요 시 점진 추가
 
+## 인가 교집합 설계 (pkey 권한 × 외부 토큰 권한)
+
+- 설계 문서: `todo_issues/fds_00001_07_pkey_auth_intersection_design.md`
+- 해결 방법: `todo_issues/fds_00001_08_pkey_intersection_solution.md`
+- 문제: 외부 서비스 토큰(서비스 계정)이 사용자 인가 범위보다 넓어 권한 초과 접근 가능
+- 원칙: 사용자 접근 범위 = 사용자 인가 pkey ∩ 외부 토큰 pkey (교집합)
+- 해결: 사전 검증(경로 pkey 추출→차단) + 응답 필터링(목록 pkey 제거) 이중 방어
+- 관리 라우터: DB CRUD로 대체 (admin API 엔드포인트 제거)
+
 ## 다음 실행 액션
 
 1. `fds rule105 00001`로 done 판정 진행
@@ -137,7 +146,8 @@ FDS API (FastAPI)
 
 - DB 등록 서비스만 프록시 허용 (미등록 → 404, 비활성 → 403)
 - uri_mappings 화이트리스트 매칭 (미등록 경로 차단)
-- Admin API는 `X-ADMIN-KEY` 헤더 필수
+- 사용자 인증: Keycloak JWT 검증 (OIDC)
+- ~~Admin API는 `X-ADMIN-KEY` 헤더 필수~~ → 제거 (DB 직접 관리)
 
 ### Phase 2 보안 (MVP 제외)
 - auth_value Fernet 암호화 + Vault 연동
@@ -149,10 +159,10 @@ FDS API (FastAPI)
 
 | 기준 | 검증 방법 |
 |---|---|
-| DB 저장/조회 | Admin API로 서비스·URI CRUD 확인 |
+| DB 저장/조회 | DB 직접 조작으로 서비스·URI CRUD 확인 |
 | 프록시 정상 동작 | httpx 호출 성공 (외부 서비스 응답 반환) |
 | 인가 헤더 자동 주입 | 외부 서비스에서 401 없이 응답 |
-| CRUD 가능 | Swagger UI에서 Admin API 전체 테스트 |
+| CRUD 가능 | DB 직접 조작 (DBeaver/SQLite CLI) |
 | Swagger 전체 노출 | `/docs`에서 전체 API 확인 |
 
 ## 산출물
@@ -165,7 +175,8 @@ FDS API (FastAPI)
 | `app/schemas.py` | Pydantic 요청/응답 스키마 |
 | `app/crud/` | service layer 분리 (CRUD 로직) |
 | `app/routers/proxy.py` | 프록시 라우터 |
-| `app/routers/admin.py` | 관리 API 라우터 |
+| `app/auth/keycloak.py` | Keycloak JWT 검증 (신규) |
+| ~~`app/routers/admin.py`~~ | ~~관리 API 라우터~~ → 제거 (DB 직접 CRUD) |
 
 ### 기타
 | 파일 | 설명 |
@@ -177,12 +188,12 @@ FDS API (FastAPI)
 
 | 기능 | 포함 | 비고 |
 |---|---|---|
-| services CRUD | O | Admin API |
-| uri_mappings CRUD | O | Admin API |
+| services CRUD | O | DB 직접 관리 (Admin API 제거) |
+| uri_mappings CRUD | O | DB 직접 관리 (Admin API 제거) |
 | 프록시 호출 + 인가 주입 | O | 핵심 기능 |
 | 미등록 서비스 404 / 비활성 403 | O | 보안 최소선 |
 | 화이트리스트 경로 확인 | O | uri_mappings 기반 |
-| Admin API Key 보호 | O | X-ADMIN-KEY 헤더 |
+| Keycloak JWT 인증 | O | OIDC Access Token 검증 |
 | 샘플 시딩 | O | conf, jira |
 | 토큰 암호화 (Fernet) | X | Phase 2 |
 | SSRF IP 필터링 | X | Phase 2 |
@@ -191,8 +202,8 @@ FDS API (FastAPI)
 
 ## 후속 작업 (Phase 2)
 
-- 사용자별 토큰 위임 (SSO/JWT 검증 후 대리 호출)
-- 실제 Confluence/Jira 연동 테스트 (인증 토큰 필요)
+- pkey 교집합 강제 (사용자 인가 pkey ∩ 외부 토큰 pkey)
+- 실제 Confluence/Jira 연동 테스트
 - auth_value Fernet 암호화 + Vault 연동
 - PostgreSQL 전환 + Redis 캐시 (service lookup)
 - 요청/응답 로깅 + 감사 추적 (proxy_logs 테이블)

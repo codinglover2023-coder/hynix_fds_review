@@ -14,8 +14,8 @@ SQLite 샘플로 URI 매핑 DB 관리 구조를 검증한다.
 
 ## 현재 결정사항
 
-1. **시스템 성격**: **인가 통제형 단일 토큰 프록시 게이트웨이 (화이트리스트 기반)**
-2. **인증 주체**: FDS 단일 서비스 토큰 (사용자별 위임은 Phase 2)
+1. **시스템 성격**: **인가 통제형 Keycloak 기반 프록시 게이트웨이 (화이트리스트 기반)**
+2. **인증 주체**: Keycloak Access Token (JWT/OIDC)
 3. **URL 구조**: `{fdsapi_base_url}/{sub_prefix_uri}/{서비스별 URI}` — 루트 레벨
 4. **DB**: SQLite (샘플) — 운영 시 PostgreSQL 전환 가능 구조
 5. **ORM**: SQLAlchemy (async) + aiosqlite
@@ -23,7 +23,7 @@ SQLite 샘플로 URI 매핑 DB 관리 구조를 검증한다.
 7. **인가 방식**: 서비스별 인증 정보를 DB에 저장(MVP: 평문), 프록시 시 헤더에 주입
 8. **uri_mappings 역할**: 허용 경로 화이트리스트 (경로 변환 없음, prefix 매칭)
 9. **레이어 분리**: Proxy 로직과 Admin 로직 분리 (crud/ 디렉토리)
-10. **Admin API 인증**: API Key 헤더 방식 (`X-ADMIN-KEY`)
+10. **서비스/매핑 관리**: DB 직접 CRUD (Admin API 엔드포인트 제거, DBeaver/스크립트 사용)
 
 ## SQLite 스키마 (확정)
 
@@ -66,7 +66,8 @@ SQLite 샘플로 URI 매핑 DB 관리 구조를 검증한다.
 ### MVP 적용
 - DB 등록 서비스만 프록시 허용 (미등록 → 404, 비활성 → 403)
 - uri_mappings 화이트리스트 매칭 (미등록 경로 차단)
-- Admin API: `X-ADMIN-KEY` 헤더 필수
+- 사용자 인증: Keycloak JWT 검증 (OIDC)
+- ~~Admin API: `X-ADMIN-KEY` 헤더 필수~~ → 제거 (DB 직접 관리)
 
 ### Phase 2
 - auth_value Fernet 암호화 + Vault 연동
@@ -78,7 +79,7 @@ SQLite 샘플로 URI 매핑 DB 관리 구조를 검증한다.
 
 | 항목 | 결정 | 비고 |
 |---|---|---|
-| ~~인증 주체~~ | FDS 단일 서비스 토큰 | 사용자별 위임은 Phase 2 |
+| ~~인증 주체~~ | Keycloak Access Token (JWT/OIDC) | X-ADMIN-KEY 대체 |
 | ~~URI 매핑 검증~~ | prefix 매칭 | 와일드카드/정규식은 Phase 2 |
 | ~~Rate limit~~ | MVP 제외 | Phase 2 |
 
